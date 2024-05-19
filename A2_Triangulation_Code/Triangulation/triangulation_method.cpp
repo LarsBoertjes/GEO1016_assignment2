@@ -28,7 +28,7 @@
 
 
 using namespace easy3d;
-
+std::vector<Vector2D> normalize_points(const std::vector<Vector2D> &points);
 
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
@@ -51,81 +51,6 @@ bool Triangulation::triangulation(
     ///       It is advised to define a function for the sub-tasks. This way you have a clean and well-structured
     ///       implementation, which also makes testing and debugging easier. You can put your other functions above
     ///       triangulation(), or put them in one or multiple separate files.
-
-    std::cout << "\nTODO: I am going to implement the triangulation() function in the following file:" << std::endl
-              << "\t    - triangulation_method.cpp\n\n";
-
-    std::cout << "[Liangliang]:\n"
-                 "\tFeel free to use any provided data structures and functions. For your convenience, the\n"
-                 "\tfollowing three files implement basic linear algebra data structures and operations:\n"
-                 "\t    - Triangulation/matrix.h  Matrices of arbitrary dimensions and related functions.\n"
-                 "\t    - Triangulation/vector.h  Vectors of arbitrary dimensions and related functions.\n"
-                 "\t    - Triangulation/matrix_algo.h  Determinant, inverse, SVD, linear least-squares...\n"
-                 "\tPlease refer to the above files for a complete list of useful functions and their usage.\n\n"
-                 "\tIf you choose to implement the non-linear method for triangulation (optional task). Please\n"
-                 "\trefer to 'Tutorial_NonlinearLeastSquares/main.cpp' for an example and some explanations.\n\n"
-                 "\tIn your final submission, please\n"
-                 "\t    - delete ALL unrelated test or debug code and avoid unnecessary output.\n"
-                 "\t    - include all the source code (and please do NOT modify the structure of the directories).\n"
-                 "\t    - do NOT include the 'build' directory (which contains the intermediate files in a build step).\n"
-                 "\t    - make sure your code compiles and can reproduce your results without ANY modification.\n\n" << std::flush;
-
-    /// Below are a few examples showing some useful data structures and APIs.
-
-    /// define a 2D vector/point
-    Vector2D b(1.1, 2.2);
-
-    /// define a 3D vector/point
-    Vector3D a(1.1, 2.2, 3.3);
-
-    /// get the Cartesian coordinates of a (a is treated as Homogeneous coordinates)
-    Vector2D p = a.cartesian();
-
-    /// get the Homogeneous coordinates of p
-    Vector3D q = p.homogeneous();
-
-    /// define a 3 by 3 matrix (and all elements initialized to 0.0)
-    Matrix33 A;
-
-    /// define and initialize a 3 by 3 matrix
-    Matrix33 T(1.1, 2.2, 3.3,
-               0, 2.2, 3.3,
-               0, 0, 1);
-
-    /// define and initialize a 3 by 4 matrix
-    Matrix34 M(1.1, 2.2, 3.3, 0,
-               0, 2.2, 3.3, 1,
-               0, 0, 1, 1);
-
-    /// set first row by a vector
-    M.set_row(0, Vector4D(1.1, 2.2, 3.3, 4.4));
-
-    /// set second column by a vector
-    M.set_column(1, Vector3D(5.5, 5.5, 5.5));
-
-    /// define a 15 by 9 matrix (and all elements initialized to 0.0)
-    Matrix W(15, 9, 0.0);
-    /// set the first row by a 9-dimensional vector
-    W.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
-
-    /// get the number of rows.
-    int num_rows = W.rows();
-
-    /// get the number of columns.
-    int num_cols = W.cols();
-
-    /// get the the element at row 1 and column 2
-    double value = W(1, 2);
-
-    /// get the last column of a matrix
-    Vector last_column = W.get_column(W.cols() - 1);
-
-    /// define a 3 by 3 identity matrix
-    Matrix33 I = Matrix::identity(3, 3, 1.0);
-
-    /// matrix-vector product
-    Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
-
     ///For more functions of Matrix and Vector, please refer to 'matrix.h' and 'vector.h'
 
     // TODO: delete all above example code in your final submission
@@ -134,11 +59,18 @@ bool Triangulation::triangulation(
     // implementation starts ...
 
     // TODO: check if the input is valid (always good because you never known how others will call your function).
+    if (points_0.size() != points_1.size() || points_0.size() < 8) {
+        std::cerr << "Error: mismatch in number of points or minimum required amount of 8 points is not met" << std::endl;
+    }
+
 
     // TODO: Estimate relative pose of two views. This can be subdivided into
     //      - estimate the fundamental matrix F;
     //      - compute the essential matrix E;
     //      - recover rotation R and t.
+
+    std::vector<Vector2D> normalized_points_0 = normalize_points(points_0);
+
 
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
@@ -154,4 +86,40 @@ bool Triangulation::triangulation(
     //          - input not valid (e.g., not enough points, point numbers don't match);
     //          - encountered failure in any step.
     return points_3d.size() > 0;
+}
+
+std::vector<Vector2D> normalize_points(const std::vector<Vector2D> &points) {
+    size_t N = points.size();
+    if (N == 0) return {};
+
+    // Calculate the centroid
+    double sumX = 0, sumY = 0;
+    for (const auto& p : points) {
+        sumX += p.x();
+        sumY += p.y();
+    }
+    double centroidX = sumX / N;
+    double centroidY = sumY / N;
+
+    // Calculate scaling factor
+    double sumDistSquared = 0;
+    for (const auto& p : points) {
+        double dx = p.x() - centroidX;
+        double dy = p.y() - centroidY;
+        sumDistSquared += (dx * dx) + (dy * dy);
+    }
+    double avgDist = std::sqrt(sumDistSquared / N);
+    double scale = std::sqrt(2) / avgDist;
+
+    // Normalize the points
+    std::vector<Vector2D> normalized_points;
+    normalized_points.reserve(N);
+    for (const auto& p : points) {
+        Vector2D normalized;
+        normalized.x() = (p.x() - centroidX) * scale;
+        normalized.y() = (p.y() - centroidY) * scale;
+        normalized_points.push_back(normalized);
+    }
+
+    return normalized_points;
 }

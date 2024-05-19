@@ -13,7 +13,8 @@ add_executable(${PROJECT_NAME}
         matrix.h
         matrix_algo.h
         matrix_algo.cpp
-        )
+        ../datastructuresapi.h
+)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${EASY3D_INCLUDE_DIR})
 
