@@ -33,6 +33,8 @@ int main(int argc, char** argv) {
     const std::string image_point_file_0 = resource::directory() + "/data/image_points_0.xyz";
     const std::string image_point_file_1 = resource::directory() + "/data/image_points_1.xyz";
 
+    std::cout << "Test main" << std::endl;
+
     try {
         Triangulation viewer("Triangulation", image_point_file_0, image_point_file_1);
 

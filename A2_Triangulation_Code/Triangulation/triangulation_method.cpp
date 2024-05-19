@@ -28,7 +28,10 @@
 
 
 using namespace easy3d;
-std::vector<Vector2D> normalize_points(const std::vector<Vector2D> &points);
+Matrix33 calculate_transformation_matrix(const std::vector<Vector2D> &points);
+std::vector<Vector2D> normalize_points(const std::vector<Vector2D>& points, const Matrix33& T);
+void check_normalization(const std::vector<Vector2D>& points, const std::string& description);
+Matrix construct_matrix_W(const std::vector<Vector2D>& points_0_normalized, const std::vector<Vector2D>& points_1_normalized);
 
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
@@ -69,7 +72,53 @@ bool Triangulation::triangulation(
     //      - compute the essential matrix E;
     //      - recover rotation R and t.
 
-    std::vector<Vector2D> normalized_points_0 = normalize_points(points_0);
+    // Compute transformation matrices
+    Matrix33 T0 = calculate_transformation_matrix(points_0);
+    Matrix33 T1 = calculate_transformation_matrix(points_1);
+
+    // Normalize points
+    std::vector<Vector2D> points_0_normalized = normalize_points(points_0, T0);
+    std::vector<Vector2D> points_1_normalized = normalize_points(points_1, T1);
+
+    // Check normalization
+    check_normalization(points_0_normalized, "Points 0");
+    check_normalization(points_1_normalized, "Points 1");
+
+    // construct matrix W
+    Matrix W = construct_matrix_W(points_0_normalized, points_1_normalized);
+
+    std::cout << "Matrix W has " << W.rows() << " rows and " << W.cols() << " columns" << std::endl;
+
+    // Extract f matrix using SVD decomposition
+
+    // First we need to extract the estimate, use the slides for this
+
+    Matrix U(W.rows(), W.rows());
+    Matrix D(W.rows(), W.cols());
+    Matrix V(W.cols(), W.cols());
+
+
+    std::cout << "Matrix U has " << U.rows() << " rows and " << U.cols() << " columns" << std::endl;
+    std::cout << "Matrix D has " << D.rows() << " rows and " << D.cols() << " columns" << std::endl;
+    std::cout << "Matrix V has " << V.rows() << " rows and " << V.cols() << " columns" << std::endl;
+
+    svd_decompose(W, U, D, V);
+
+    if (D.rows() >= 3) {
+        D(2, 2) = 0.0;
+    }
+
+    Matrix F = U * D * V.transpose();
+
+    std::cout << "Fundamental Matrix F:" << std::endl;
+    for (int i = 0; i < F.rows(); ++i) {
+        for (int j = 0; j < F.cols(); ++j) {
+            std::cout << F(i, j) << " ";
+        }
+        std::cout << std::endl;
+    }
+
+
 
 
     // TODO: Reconstruct 3D points. The main task is
@@ -88,11 +137,11 @@ bool Triangulation::triangulation(
     return points_3d.size() > 0;
 }
 
-std::vector<Vector2D> normalize_points(const std::vector<Vector2D> &points) {
+Matrix33 calculate_transformation_matrix(const std::vector<Vector2D> &points) {
     size_t N = points.size();
-    if (N == 0) return {};
+    if (N == 0) return Matrix33(); // Return an identity matrix if no points
 
-    // Calculate the centroid
+    // Calculate centroid
     double sumX = 0, sumY = 0;
     for (const auto& p : points) {
         sumX += p.x();
@@ -101,25 +150,95 @@ std::vector<Vector2D> normalize_points(const std::vector<Vector2D> &points) {
     double centroidX = sumX / N;
     double centroidY = sumY / N;
 
-    // Calculate scaling factor
+    // Calculate scale factor
     double sumDistSquared = 0;
     for (const auto& p : points) {
         double dx = p.x() - centroidX;
         double dy = p.y() - centroidY;
-        sumDistSquared += (dx * dx) + (dy * dy);
+        sumDistSquared += dx * dx + dy * dy;
     }
     double avgDist = std::sqrt(sumDistSquared / N);
     double scale = std::sqrt(2) / avgDist;
 
-    // Normalize the points
+    // Create transformation matrix
+    Matrix33 T;
+    T(0, 0) = scale;
+    T(0, 1) = 0;
+    T(0, 2) = -scale * centroidX;
+    T(1, 0) = 0;
+    T(1, 1) = scale;
+    T(1, 2) = -scale * centroidY;
+    T(2, 0) = 0;
+    T(2, 1) = 0;
+    T(2, 2) = 1;
+
+    return T;
+}
+
+
+std::vector<Vector2D> normalize_points(const std::vector<Vector2D>& points, const Matrix33& T) {
     std::vector<Vector2D> normalized_points;
-    normalized_points.reserve(N);
-    for (const auto& p : points) {
-        Vector2D normalized;
-        normalized.x() = (p.x() - centroidX) * scale;
-        normalized.y() = (p.y() - centroidY) * scale;
-        normalized_points.push_back(normalized);
+    normalized_points.reserve(points.size());
+
+    for (const Vector2D &p : points) {
+        Vector3D p_homogeneous = p.homogeneous();
+        Vector3D transformed = T * p_homogeneous;
+        Vector2D normalized_p = transformed.cartesian();
+        normalized_points.push_back(normalized_p);
     }
 
     return normalized_points;
+}
+
+void check_normalization(const std::vector<Vector2D>& points, const std::string& description) {
+    double sumX = 0, sumY = 0;
+    double sumDistSquared = 0;
+    size_t N = points.size();
+
+    for (const auto& p : points) {
+        sumX += p.x();
+        sumY += p.y();
+        sumDistSquared += p.x() * p.x() + p.y() * p.y();
+    }
+
+    double centroidX = sumX / N;
+    double centroidY = sumY / N;
+    double avgDist = std::sqrt(sumDistSquared / N);
+
+    std::cout << "Normalization check for " << description << ":" << std::endl;
+    std::cout << " - Centroid: (" << centroidX << ", " << centroidY << ")" << std::endl;
+    std::cout << " - Average Distance from Origin: " << avgDist << std::endl;
+
+    // Check if the centroid is close enough to (0,0) and the average distance is close to sqrt(2)
+    const double epsilon = 1e-6; // Tolerance for floating point comparison
+    bool isCentroidCorrect = std::abs(centroidX) < epsilon && std::abs(centroidY) < epsilon;
+    bool isScaleCorrect = std::abs(avgDist - std::sqrt(2)) < epsilon;
+
+    std::cout << " - Centroid is " << (isCentroidCorrect ? "correct" : "incorrect") << std::endl;
+    std::cout << " - Scale is " << (isScaleCorrect ? "correct" : "incorrect") << std::endl;
+}
+
+
+Matrix construct_matrix_W(const std::vector<Vector2D>& points_0_normalized, const std::vector<Vector2D>& points_1_normalized) {
+    Matrix W(points_0_normalized.size(), 9, 0.0);
+
+    for (size_t i = 0; i < points_0_normalized.size(); ++i) {
+        const auto& p0 = points_0_normalized[i];
+        const auto& p1 = points_1_normalized[i];
+
+        std::vector<double> row = {
+                p1.x() * p0.x(),
+                p1.x() * p0.y(),
+                p1.x(),
+                p1.y() * p0.x(),
+                p1.y() * p0.y(),
+                p1.y(),
+                p0.x(),
+                p0.y(),
+                1.0
+        };
+        W.set_row(i, row);
+    }
+
+    return W;
 }
