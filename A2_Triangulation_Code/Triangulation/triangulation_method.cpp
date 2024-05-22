@@ -69,8 +69,6 @@ bool Triangulation::triangulation(
 
     // TODO: Estimate relative pose of two views. This can be subdivided into
     //      - estimate the fundamental matrix F;
-    //      - compute the essential matrix E;
-    //      - recover rotation R and t.
 
     // Compute transformation matrices
     Matrix33 T0 = calculate_transformation_matrix(points_0);
@@ -84,31 +82,35 @@ bool Triangulation::triangulation(
     check_normalization(points_0_normalized, "Points 0");
     check_normalization(points_1_normalized, "Points 1");
 
-    // construct matrix W
+    // Construct matrix W
     Matrix W = construct_matrix_W(points_0_normalized, points_1_normalized);
 
-    std::cout << "Matrix W has " << W.rows() << " rows and " << W.cols() << " columns" << std::endl;
-
-    // Extract f matrix using SVD decomposition
-
-    // First we need to extract the estimate, use the slides for this
-
+    // Extract f matrix using SVD decomposition, W = USV.T, last column of V gives f
     Matrix U(W.rows(), W.rows());
-    Matrix D(W.rows(), W.cols());
+    Matrix S(W.rows(), W.cols());
     Matrix V(W.cols(), W.cols());
 
+    svd_decompose(W, U, S, V);
+    Vector f = V.get_column(W.cols() - 1);
 
-    std::cout << "Matrix U has " << U.rows() << " rows and " << U.cols() << " columns" << std::endl;
-    std::cout << "Matrix D has " << D.rows() << " rows and " << D.cols() << " columns" << std::endl;
-    std::cout << "Matrix V has " << V.rows() << " rows and " << V.cols() << " columns" << std::endl;
+    // Convert f to F_estimate
+    Matrix33 F_estimate(f[0], f[1], f[2],
+                        f[3], f[4], f[5],
+                        f[6], f[7], f[8]);
 
-    svd_decompose(W, U, D, V);
+    // Perform SVD decomposition again and change the smallest singular value to ensure rank 2
+    Matrix U0(F_estimate.rows(), F_estimate.rows());
+    Matrix S0(F_estimate.rows(), F_estimate.cols());
+    Matrix V0(F_estimate.cols(), F_estimate.cols());
 
-    if (D.rows() >= 3) {
-        D(2, 2) = 0.0;
-    }
+    svd_decompose(F_estimate, U0, S0, V0);
+    S0(2,2) = 0;
 
-    Matrix F = U * D * V.transpose();
+    // Reconstruct fundamental matrix with rank 2
+    Matrix33 Fq = U0 * S0 * V0.transpose();
+
+    // Denormalize fundamental matrix
+    Matrix33 F = T1.transpose() * Fq * T0;
 
     std::cout << "Fundamental Matrix F:" << std::endl;
     for (int i = 0; i < F.rows(); ++i) {
@@ -118,7 +120,12 @@ bool Triangulation::triangulation(
         std::cout << std::endl;
     }
 
+    // Test F on some correspondences to see if p'.transpose*F*p = 0 (does not work yet)
+    //double epipolar_constraint = F * points_1[0].homogeneous() * points_0[0].homogeneous();
+    //std::cout << "Epipolar constraint value: " << epipolar_constraint << std::endl;
 
+    //      - compute the essential matrix E;
+    //      - recover rotation R and t.
 
 
     // TODO: Reconstruct 3D points. The main task is

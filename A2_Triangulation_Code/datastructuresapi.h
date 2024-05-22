@@ -61,4 +61,33 @@ Matrix33 I = Matrix::identity(3, 3, 1.0);
 /// matrix-vector product
 Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
 
+/// To access the value of an element.
+double a = array[2];
+
+/// define a 2D vector/point
+Vector2D b(1.1, 2.2);
+
+/// define a 3D vector/point
+Vector3D c(1.1, 2.2, 3.3);
+
+/// get the Cartesian coordinates of a (a is treated as Homogeneous coordinates)
+Vector2D p = c.cartesian();
+
+/// get the Homogeneous coordinates of p
+Vector3D q = p.homogeneous();
+
+/// the length of a vector
+double len = p.length();
+/// the squared length of a vector
+double sqr_len = p.length2();
+
+/// the dot product of two vectors
+double dot_prod = dot(p, q);
+
+/// the cross product of two vectors
+Vector cross_prod = cross(c, q);
+
+/// normalize this vector
+cross_prod.normalize();
+
 #endif //A2_TRIANGULATION_CODE_DATASTRUCTURESAPI_H
