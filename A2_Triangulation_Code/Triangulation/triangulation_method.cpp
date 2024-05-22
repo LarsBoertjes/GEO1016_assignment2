@@ -32,6 +32,7 @@ Matrix33 calculate_transformation_matrix(const std::vector<Vector2D> &points);
 std::vector<Vector2D> normalize_points(const std::vector<Vector2D>& points, const Matrix33& T);
 void check_normalization(const std::vector<Vector2D>& points, const std::string& description);
 Matrix construct_matrix_W(const std::vector<Vector2D>& points_0_normalized, const std::vector<Vector2D>& points_1_normalized);
+void printMatrix33(const Matrix33& M);
 
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
@@ -111,21 +112,45 @@ bool Triangulation::triangulation(
 
     // Denormalize fundamental matrix
     Matrix33 F = T1.transpose() * Fq * T0;
-
-    std::cout << "Fundamental Matrix F:" << std::endl;
-    for (int i = 0; i < F.rows(); ++i) {
-        for (int j = 0; j < F.cols(); ++j) {
-            std::cout << F(i, j) << " ";
-        }
-        std::cout << std::endl;
-    }
+    std::cout << "Matrix F:" << std::endl;
+    printMatrix33(F);
 
     // Test F on some correspondences to see if p'.transpose*F*p = 0 (does not work yet)
     //double epipolar_constraint = F * points_1[0].homogeneous() * points_0[0].homogeneous();
     //std::cout << "Epipolar constraint value: " << epipolar_constraint << std::endl;
 
     //      - compute the essential matrix E;
+    // construct K intrinsic matrix
+    Matrix33 K(fx, s, cx,
+               0, fy, cy,
+               0, 0, 1);
+    std::cout << "Matrix K:" << std::endl;
+    printMatrix33(K);
+
+    // construct Essential matrix E
+    Matrix E = K.transpose() * F * K;
+    std::cout << "Matrix E:" << std::endl;
+    printMatrix33(E);
+
     //      - recover rotation R and t.
+    Matrix U1(E.rows(), E.rows());
+    Matrix S1(E.rows(), E.cols());
+    Matrix V1(E.cols(), E.cols());
+
+    svd_decompose(E, U1, S1, V1);
+
+    Matrix33 W0(0, -1, 0,
+                1, 0, 0,
+                0, 0, 1);
+    Matrix33 W0t = W0.transpose();
+    Matrix33 V1t = V1.transpose();
+
+    Matrix33 R_option1 = (determinant(U1 * W0 * V1t)) * U1 * W0 * V1t;
+    Matrix33 R_option2 = (determinant(U1 * W0t * V1t)) * U1 * W0t * V1t;
+
+    Vector3D t_option1 = U1.get_column(W.cols() - 1);
+    Vector3D t_option2 = -1 * U1.get_column(W.cols() - 1);
+
 
 
     // TODO: Reconstruct 3D points. The main task is
@@ -248,4 +273,13 @@ Matrix construct_matrix_W(const std::vector<Vector2D>& points_0_normalized, cons
     }
 
     return W;
+}
+
+void printMatrix33(const Matrix33& M) {
+    for (int i = 0; i < M.rows(); ++i) {
+        for (int j = 0; j < M.cols(); ++j) {
+            std::cout << M(i, j) << " ";
+        }
+        std::cout << std::endl;
+    }
 }
