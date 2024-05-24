@@ -33,6 +33,10 @@ std::vector<Vector2D> normalize_points(const std::vector<Vector2D>& points, cons
 void check_normalization(const std::vector<Vector2D>& points, const std::string& description);
 Matrix construct_matrix_W(const std::vector<Vector2D>& points_0_normalized, const std::vector<Vector2D>& points_1_normalized);
 void printMatrix33(const Matrix33& M);
+void printPoints(const std::vector<Vector2D> &points);
+Matrix34 construct_matrix_M(const Matrix33& K, const Matrix33& R, const Vector3D& t);
+Vector3D perform_linear_triangulation(const Vector2D &point1, const Vector2D &point2, const Matrix34& M, const Matrix34& M_prime);
+int count_num_pos_z(const std::vector<Vector3D>& points3D);
 
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
@@ -83,6 +87,9 @@ bool Triangulation::triangulation(
     check_normalization(points_0_normalized, "Points 0");
     check_normalization(points_1_normalized, "Points 1");
 
+    printPoints(points_0_normalized);
+    printPoints(points_1_normalized);
+
     // Construct matrix W
     Matrix W = construct_matrix_W(points_0_normalized, points_1_normalized);
 
@@ -92,6 +99,7 @@ bool Triangulation::triangulation(
     Matrix V(W.cols(), W.cols());
 
     svd_decompose(W, U, S, V);
+
     Vector f = V.get_column(W.cols() - 1);
 
     // Convert f to F_estimate
@@ -99,27 +107,28 @@ bool Triangulation::triangulation(
                         f[3], f[4], f[5],
                         f[6], f[7], f[8]);
 
-    // Perform SVD decomposition again and change the smallest singular value to ensure rank 2
-    Matrix U0(F_estimate.rows(), F_estimate.rows());
-    Matrix S0(F_estimate.rows(), F_estimate.cols());
-    Matrix V0(F_estimate.cols(), F_estimate.cols());
+    printMatrix33(F_estimate);
 
-    svd_decompose(F_estimate, U0, S0, V0);
-    S0(2,2) = 0;
+    // Perform SVD decomposition again and change the smallest singular value to ensure rank 2
+    Matrix U_est(F_estimate.rows(), F_estimate.rows());
+    Matrix S_est(F_estimate.rows(), F_estimate.cols());
+    Matrix V_est(F_estimate.cols(), F_estimate.cols());
+
+    svd_decompose(F_estimate, U_est, S_est, V_est);
+
+    // Ensure rank 2
+    S_est(2,2) = 0;
 
     // Reconstruct fundamental matrix with rank 2
-    Matrix33 Fq = U0 * S0 * V0.transpose();
+    Matrix33 Fnorm = U_est * S_est * V_est.transpose();
 
     // Denormalize fundamental matrix
-    Matrix33 F = T1.transpose() * Fq * T0;
+    Matrix33 F = T1.transpose() * Fnorm * T0;
     std::cout << "Matrix F:" << std::endl;
     printMatrix33(F);
 
-    // Test F on some correspondences to see if p'.transpose*F*p = 0 (does not work yet)
-    //double epipolar_constraint = F * points_1[0].homogeneous() * points_0[0].homogeneous();
-    //std::cout << "Epipolar constraint value: " << epipolar_constraint << std::endl;
-
-    //      - compute the essential matrix E;
+    // Step #2
+    // TODO: compute the essential matrix E;
     // construct K intrinsic matrix
     Matrix33 K(fx, s, cx,
                0, fy, cy,
@@ -132,29 +141,56 @@ bool Triangulation::triangulation(
     std::cout << "Matrix E:" << std::endl;
     printMatrix33(E);
 
-    //      - recover rotation R and t.
-    Matrix U1(E.rows(), E.rows());
-    Matrix S1(E.rows(), E.cols());
-    Matrix V1(E.cols(), E.cols());
+    // TODO: - recover rotation R and t.
+    Matrix U_(E.rows(), E.rows());
+    Matrix D_(E.rows(), E.cols());
+    Matrix V_(E.cols(), E.cols());
 
-    svd_decompose(E, U1, S1, V1);
+    svd_decompose(E, U_, D_, V_);
 
-    Matrix33 W0(0, -1, 0,
+    Matrix33 W_(0, -1, 0,
                 1, 0, 0,
                 0, 0, 1);
-    Matrix33 W0t = W0.transpose();
-    Matrix33 V1t = V1.transpose();
 
-    Matrix33 R_option1 = (determinant(U1 * W0 * V1t)) * U1 * W0 * V1t;
-    Matrix33 R_option2 = (determinant(U1 * W0t * V1t)) * U1 * W0t * V1t;
+    Matrix33 R1 = determinant(U_ * W_ * V_.transpose()) * U_ * W_* V_.transpose();
+    Matrix33 R2 = determinant(U_ * W_.transpose() * V_.transpose()) * U_ * W_.transpose() * V_.transpose();
 
-    Vector3D t_option1 = U1.get_column(W.cols() - 1);
-    Vector3D t_option2 = -1 * U1.get_column(W.cols() - 1);
+    std::cout << "Rotation Matrix 1: " << std::endl;
+    printMatrix33(R1);
 
+    std::cout << "Rotation Matrix 2: " << std::endl;
+    printMatrix33(R2);
 
+    Vector3D t1 = U_.get_column(U_.cols() - 1);
+    Vector3D t2 = -1 * U_.get_column(U_.cols() - 1);
+
+    std::cout << "Translation vector 1: " << t1 << std::endl;
+    std::cout << "Translation vector 2: " << t2 << std::endl;
 
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
+
+    // Construct M (all four options)
+    Matrix34 M1 = construct_matrix_M(K, R1, t1);
+    Matrix34 M2 = construct_matrix_M(K, R2, t1);
+    Matrix34 M3 = construct_matrix_M(K, R1, t2);
+    Matrix34 M4 = construct_matrix_M(K, R2, t2);
+
+    // perform linear method for triangulation
+    std::vector<Vector3D> pointsA, pointsB, pointsC, pointsD;
+
+    for (int i = 0; i < points_0.size(); ++i) {
+        pointsA.push_back(perform_linear_triangulation(points_0[i], points_1[i], M1, M1));
+        pointsB.push_back(perform_linear_triangulation(points_0[i], points_1[i], M2, M2));
+        pointsC.push_back(perform_linear_triangulation(points_0[i], points_1[i], M3, M3));
+        pointsD.push_back(perform_linear_triangulation(points_0[i], points_1[i], M4, M4));
+    }
+
+    std::cout << "PointsA has " << count_num_pos_z(pointsA) << " number of points with positive Z" << std::endl;
+    std::cout << "PointsB has " << count_num_pos_z(pointsB) << " number of points with positive Z" << std::endl;
+    std::cout << "PointsC has " << count_num_pos_z(pointsC) << " number of points with positive Z" << std::endl;
+    std::cout << "PointsD has " << count_num_pos_z(pointsD) << " number of points with positive Z" << std::endl;
+
 
     // TODO: Don't forget to
     //          - write your recovered 3D points into 'points_3d' (so the viewer can visualize the 3D points for you);
@@ -187,9 +223,9 @@ Matrix33 calculate_transformation_matrix(const std::vector<Vector2D> &points) {
     for (const auto& p : points) {
         double dx = p.x() - centroidX;
         double dy = p.y() - centroidY;
-        sumDistSquared += dx * dx + dy * dy;
+        sumDistSquared += std::sqrt(dx * dx + dy * dy);
     }
-    double avgDist = std::sqrt(sumDistSquared / N);
+    double avgDist = sumDistSquared / N;
     double scale = std::sqrt(2) / avgDist;
 
     // Create transformation matrix
@@ -282,4 +318,91 @@ void printMatrix33(const Matrix33& M) {
         }
         std::cout << std::endl;
     }
+}
+
+
+void printPoints(const std::vector<Vector2D> &points) {
+    for (const auto &point : points) {
+        std::cout << "Point: (" << point.x() << ", " << point.y() << ")" << std::endl;
+        }
+}
+
+Matrix34 construct_matrix_M(const Matrix33& K, const Matrix33& R, const Vector3D& t) {
+    Matrix34 M;
+
+    // Compute K * R
+    Matrix33 KR = K * R;
+
+    // Set the first three columns of M to K * R
+    M.set_column(0, Vector3D(KR(0,0), KR(1,0), KR(2,0)));
+    M.set_column(1, Vector3D(KR(0,1), KR(1,1), KR(2, 1)));
+    M.set_column(2, Vector3D(KR(0,2), KR(1,2), KR(2,2)));
+
+    // Compute K * t
+    Vector3D Kt = K * t;
+
+    // Set the fourth column of M to K * t
+    M.set_column(3, Kt);
+
+    return M;
+}
+
+Vector3D perform_linear_triangulation(const Vector2D &point1, const Vector2D &point2, const Matrix34& M, const Matrix34& M_prime) {
+    double x = point1[0];
+    double y = point1[1];
+
+    double x_prime = point2[0];
+    double y_prime = point2[1];
+
+    Vector4D m1 = M.get_row(0);
+    Vector4D m2 = M.get_row(1);
+    Vector4D m3 = M.get_row(2);
+
+    Vector4D m1_prime = M_prime.get_row(0);
+    Vector4D m2_prime = M_prime.get_row(1);
+    Vector4D m3_prime = M_prime.get_row(2);
+
+    // Construct Matrix A
+    Matrix A(4, 4);
+    A(0, 0) = x * m3[0] - m1[0];
+    A(0, 1) = x * m3[1] - m1[1];
+    A(0, 2) = x * m3[2] - m1[2];
+    A(0, 3) = x * m3[3] - m1[3];
+
+    A(1, 0) = y * m3[0] - m2[0];
+    A(1, 1) = y * m3[1] - m2[1];
+    A(1, 2) = y * m3[2] - m2[2];
+    A(1, 3) = y * m3[3] - m2[3];
+
+    A(2, 0) = x_prime * m3_prime[0] - m1_prime[0];
+    A(2, 1) = x_prime * m3_prime[1] - m1_prime[1];
+    A(2, 2) = x_prime * m3_prime[2] - m1_prime[2];
+    A(2, 3) = x_prime * m3_prime[3] - m1_prime[3];
+
+    A(3, 0) = y_prime * m3_prime[0] - m2_prime[0];
+    A(3, 1) = y_prime * m3_prime[1] - m2_prime[1];
+    A(3, 2) = y_prime * m3_prime[2] - m2_prime[2];
+    A(3, 3) = y_prime * m3_prime[3] - m2_prime[3];
+
+    Matrix U(A.rows(), A.rows());
+    Matrix D(A.rows(), A.cols());
+    Matrix V(A.cols(), A.cols());
+
+    svd_decompose(A, U, D, V);
+
+    Vector3D P = V.get_column(V.cols() - 1);
+
+    return P;
+}
+
+int count_num_pos_z(const std::vector<Vector3D>& points3D) {
+    int count = 0;
+
+    for (const Vector3D& pt : points3D) {
+        if (pt.z() > 0) {
+            count++;
+        }
+    }
+
+    return count;
 }
