@@ -187,7 +187,6 @@ bool Triangulation::triangulation(
     std::vector<Vector3D> pointsA, pointsB, pointsC, pointsD;
 
     for (int i = 0; i < points_0.size(); ++i) {
-        std::cout << points_0[i] << "  " << points_1[i] << std::endl;
         pointsA.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M1_prime));
         pointsB.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M2_prime));
         pointsC.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M3_prime));
@@ -198,6 +197,10 @@ bool Triangulation::triangulation(
     std::cout << "PointsB has " << count_num_pos_z(pointsB) << " number of points with positive Z" << std::endl;
     std::cout << "PointsC has " << count_num_pos_z(pointsC) << " number of points with positive Z" << std::endl;
     std::cout << "PointsD has " << count_num_pos_z(pointsD) << " number of points with positive Z" << std::endl;
+
+    points_3d = pointsC;
+    R = R1;
+    t = t2;
 
     // TODO: Don't forget to
     //          - write your recovered 3D points into 'points_3d' (so the viewer can visualize the 3D points for you);
