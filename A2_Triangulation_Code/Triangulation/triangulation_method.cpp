@@ -37,6 +37,7 @@ void printPoints(const std::vector<Vector2D> &points);
 Matrix34 construct_matrix_M(const Matrix33& K, const Matrix33& R, const Vector3D& t);
 Vector3D perform_linear_triangulation(const Vector2D &point1, const Vector2D &point2, const Matrix34& M, const Matrix34& M_prime);
 int count_num_pos_z(const std::vector<Vector3D>& points3D);
+void printPoints3D(const std::vector<Vector3D> &points);
 
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
@@ -170,27 +171,33 @@ bool Triangulation::triangulation(
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
 
+
     // Construct M (all four options)
-    Matrix34 M1 = construct_matrix_M(K, R1, t1);
-    Matrix34 M2 = construct_matrix_M(K, R2, t1);
-    Matrix34 M3 = construct_matrix_M(K, R1, t2);
-    Matrix34 M4 = construct_matrix_M(K, R2, t2);
+    Matrix R0(3, 3, 0.0);
+    Vector3D t0(0, 0, 0);
+
+    Matrix34 M = construct_matrix_M(K, R0, t0);
+
+    Matrix34 M1_prime = construct_matrix_M(K, R1, t1);
+    Matrix34 M2_prime = construct_matrix_M(K, R2, t1);
+    Matrix34 M3_prime = construct_matrix_M(K, R1, t2);
+    Matrix34 M4_prime = construct_matrix_M(K, R2, t2);
 
     // perform linear method for triangulation
     std::vector<Vector3D> pointsA, pointsB, pointsC, pointsD;
 
     for (int i = 0; i < points_0.size(); ++i) {
-        pointsA.push_back(perform_linear_triangulation(points_0[i], points_1[i], M1, M1));
-        pointsB.push_back(perform_linear_triangulation(points_0[i], points_1[i], M2, M2));
-        pointsC.push_back(perform_linear_triangulation(points_0[i], points_1[i], M3, M3));
-        pointsD.push_back(perform_linear_triangulation(points_0[i], points_1[i], M4, M4));
+        std::cout << points_0[i] << "  " << points_1[i] << std::endl;
+        pointsA.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M1_prime));
+        pointsB.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M2_prime));
+        pointsC.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M3_prime));
+        pointsD.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M4_prime));
     }
 
     std::cout << "PointsA has " << count_num_pos_z(pointsA) << " number of points with positive Z" << std::endl;
     std::cout << "PointsB has " << count_num_pos_z(pointsB) << " number of points with positive Z" << std::endl;
     std::cout << "PointsC has " << count_num_pos_z(pointsC) << " number of points with positive Z" << std::endl;
     std::cout << "PointsD has " << count_num_pos_z(pointsD) << " number of points with positive Z" << std::endl;
-
 
     // TODO: Don't forget to
     //          - write your recovered 3D points into 'points_3d' (so the viewer can visualize the 3D points for you);
@@ -325,6 +332,12 @@ void printPoints(const std::vector<Vector2D> &points) {
     for (const auto &point : points) {
         std::cout << "Point: (" << point.x() << ", " << point.y() << ")" << std::endl;
         }
+}
+
+void printPoints3D(const std::vector<Vector3D> &points) {
+    for (const auto &point : points) {
+        std::cout << "Point: (" << point.x() << ", " << point.y() << ", " << point.z() << ")" << std::endl;
+    }
 }
 
 Matrix34 construct_matrix_M(const Matrix33& K, const Matrix33& R, const Vector3D& t) {
