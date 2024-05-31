@@ -157,31 +157,31 @@ bool Triangulation::triangulation(
     Matrix34 M1_prime = concatenate(K * R1, K * t1);
     Matrix34 M2_prime = concatenate(K * R2, K * t1);
     Matrix34 M3_prime = concatenate(K * R1, K * t2);
-    Matrix34 M4_prime = concatenate(K * R2, K * t2);*/
+    Matrix34 M4_prime = concatenate(K * R2, K * t2);
 
     Matrix34 M = construct_matrix_M(K, R0, t0);
 
     Matrix34 M1_prime = construct_matrix_M(K, R1, t1);
     Matrix34 M2_prime = construct_matrix_M(K, R2, t1);
     Matrix34 M3_prime = construct_matrix_M(K, R1, t2);
-    Matrix34 M4_prime = construct_matrix_M(K, R2, t2);
+    Matrix34 M4_prime = construct_matrix_M(K, R2, t2);*/
 
-    /*Matrix34 M = concatenate(K * R0, K * t0);
+    Matrix34 M = concatenate(K * R0, K * t0);
 
     // Get 4 M options for p1
     Matrix34 M1 = concatenate(K * R1, K * t1);
     Matrix34 M2 = concatenate(K * R1, K * t2);
     Matrix34 M3 = concatenate(K * R2, K * t1);
-    Matrix34 M4 = concatenate(K * R2, K * t2);*/
+    Matrix34 M4 = concatenate(K * R2, K * t2);
 
     // linear triangulation method
     std::vector<Vector3D> points11, points12, points21, points22;
 
     for (int i = 0; i < points_0.size(); ++i) {
-        points11.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M1_prime));
-        points12.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M2_prime));
-        points21.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M3_prime));
-        points22.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M4_prime));
+        points11.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M1));
+        points12.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M2));
+        points21.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M3));
+        points22.push_back(perform_linear_triangulation(points_0[i], points_1[i], M, M4));
     }
 
     int count11 = count_num_pos_z(points11);
@@ -208,6 +208,11 @@ bool Triangulation::triangulation(
         R = R2;
         t = t2;
     }
+
+    std::cout << "Correct Matrix R" << std::endl;
+    printMatrix33(R);
+
+    std::cout << t << std::endl;
 
     return true;
 }
@@ -303,7 +308,7 @@ void printMatrix33(const Matrix33& M) {
 void printPoints(const std::vector<Vector2D> &points) {
     for (const auto &point : points) {
         std::cout << "Point: (" << point.x() << ", " << point.y() << ")" << std::endl;
-        }
+    }
 }
 
 void printPoints3D(const std::vector<Vector3D> &points) {
